@@ -1,0 +1,7 @@
+numpy>=1.21.0
+matplotlib>=3.5.0
+Pillow>=12.1.0
+
+
+# System-level dependency for TkAgg backend (required for interactive visualization)
+# Install using: sudo apt-get install python3-tk  # For Debian/Ubuntu
