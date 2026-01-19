@@ -32,24 +32,19 @@ class SoftBodySimulation:
     def _initialize_softbody(self):
         """Initialize particles and constraints based on configuration."""
         config = self.config.simulation
-        physics_config = self.config.physics
 
-        # Create initial particle positions
-        positions = []
-        for i in range(config.num_particles):
-            if config.use_3d:
-                positions.append(np.array([i * config.initial_spacing, 0.0, 0.0]))
-            else:
-                positions.append(np.array([i * config.initial_spacing, 0.0, 0.0]))
+        # Create initial particle positions using list comprehension
+        positions = [
+            np.array([i * config.initial_spacing, 0.0, 0.0])
+            for i in range(config.num_particles)
+        ]
 
-        # Initialize particles with masses
-        masses = [config.particle_mass] * config.num_particles
+        # Initialize particles with masses using list comprehension
+        masses = [config.particle_mass for _ in range(config.num_particles)]
         self.physics_engine.initialize_particles(positions, masses)
 
-        # Add constraints (springs between particles)
-        constraints = []
-        for i in range(config.num_particles - 1):
-            constraints.append((i, i + 1))
+        # Add constraints (springs between particles) using list comprehension
+        constraints = [(i, i + 1) for i in range(config.num_particles - 1)]
 
         self.physics_engine.set_constraints(constraints)
 

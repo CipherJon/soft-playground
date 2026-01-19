@@ -57,17 +57,16 @@ class PhysicsEngine:
             positions: List of initial particle positions
             masses: List of particle masses. If None, uses default mass.
         """
-        self.particles = []
-        default_mass = (
-            self.config.particle_mass if hasattr(self.config, "particle_mass") else 1.0
-        )
+        default_mass = 1.0
 
-        for i, pos in enumerate(positions):
-            mass = masses[i] if masses and i < len(masses) else default_mass
-            particle = Particle(
-                position=pos.copy(), previous_position=pos.copy(), mass=mass
+        self.particles = [
+            Particle(
+                position=pos.copy(),
+                previous_position=pos.copy(),
+                mass=masses[i] if masses and i < len(masses) else default_mass,
             )
-            self.particles.append(particle)
+            for i, pos in enumerate(positions)
+        ]
 
     def set_constraints(self, constraints: List[Tuple[int, int]]):
         """
