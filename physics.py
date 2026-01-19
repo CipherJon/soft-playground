@@ -183,7 +183,7 @@ class PhysicsEngine:
         Returns:
             List of particle positions
         """
-        return [particle.position.copy() for particle in self.particles]
+        return list(particle.position.copy() for particle in self.particles)
 
     def set_particle_fixed(self, index: int, is_fixed: bool):
         """

@@ -10,7 +10,7 @@ import matplotlib
 matplotlib.use("TkAgg")  # Set the backend explicitly
 
 from collections import deque
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -35,7 +35,8 @@ class Visualization:
 
         # Initialize matplotlib figure and axes
         self.fig, self.ax = plt.subplots(figsize=(10, 8))
-        self.fig.canvas.manager.set_window_title("Soft Body Simulation")
+        if self.fig.canvas.manager is not None:
+            self.fig.canvas.manager.set_window_title("Soft Body Simulation")
 
         # Initialize trails for particles
         self.trails = [
@@ -74,12 +75,12 @@ class Visualization:
     def _create_control_buttons(self):
         """Create interactive control buttons."""
         # Pause/Resume button
-        self.pause_ax = plt.axes([0.7, 0.05, 0.1, 0.04])
+        self.pause_ax = plt.axes((0.7, 0.05, 0.1, 0.04))
         self.pause_button = Button(self.pause_ax, "Pause")
         self.pause_button.on_clicked(self.toggle_pause)
 
         # Reset button
-        self.reset_ax = plt.axes([0.81, 0.05, 0.1, 0.04])
+        self.reset_ax = plt.axes((0.81, 0.05, 0.1, 0.04))
         self.reset_button = Button(self.reset_ax, "Reset")
         self.reset_button.on_clicked(self.reset_simulation)
 
@@ -103,9 +104,9 @@ class Visualization:
         if not particles:
             return
 
-        # Extract positions
-        x = [p[0] for p in particles]
-        y = [p[1] for p in particles]
+        # Extract positions using generator expressions
+        x = list(p[0] for p in particles)
+        y = list(p[1] for p in particles)
 
         # Update trails
         for i, (xi, yi) in enumerate(zip(x, y)):
@@ -173,7 +174,8 @@ class Visualization:
     ):
         """Update existing plot elements."""
         # Update particle positions
-        self.particle_scatter.set_offsets(list(zip(x, y)))
+        if self.particle_scatter is not None:
+            self.particle_scatter.set_offsets(list(zip(x, y)))
 
         # Update trails
         for i, trail_line in enumerate(self.trail_lines):

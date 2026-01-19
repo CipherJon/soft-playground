@@ -65,7 +65,7 @@ class SoftBodySimulation:
         Returns:
             List of particle positions
         """
-        return self.physics_engine.get_positions()
+        return list(self.physics_engine.get_positions())
 
     def get_particle_count(self) -> int:
         """
