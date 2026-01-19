@@ -5,6 +5,7 @@ This module implements a soft body simulation using a physics engine with Verlet
 spring constraints, and configurable parameters.
 """
 
+from itertools import pairwise
 from typing import List, Optional, Tuple
 
 import numpy as np
@@ -43,8 +44,9 @@ class SoftBodySimulation:
         masses = [config.particle_mass for _ in range(config.num_particles)]
         self.physics_engine.initialize_particles(positions, masses)
 
-        # Add constraints (springs between particles) using list comprehension
-        constraints = [(i, i + 1) for i in range(config.num_particles - 1)]
+        # Add constraints (springs between particles) using itertools pairwise
+        particle_indices = range(config.num_particles)
+        constraints = list(pairwise(particle_indices))
 
         self.physics_engine.set_constraints(constraints)
 
