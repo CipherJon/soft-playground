@@ -115,29 +115,36 @@ class SimulationConfigManager:
         )
         merged_simulation_config = default_simulation_config | simulation_config
 
-        return cls(
-            physics=PhysicsConfig(
-                gravity=merged_physics_config["gravity"],
-                damping=merged_physics_config["damping"],
-                spring_constant=merged_physics_config["spring_constant"],
-                rest_length=merged_physics_config["rest_length"],
-                time_step=merged_physics_config["time_step"],
-                integration_method=merged_physics_config["integration_method"],
-            ),
-            visualization=VisualizationConfig(
-                trail_length=merged_visualization_config["trail_length"],
-                particle_size=merged_visualization_config["particle_size"],
-                axis_margin=merged_visualization_config["axis_margin"],
-                min_axis_margin=merged_visualization_config["min_axis_margin"],
-                update_interval=merged_visualization_config["update_interval"],
-            ),
-            simulation=SimulationConfig(
-                num_particles=merged_simulation_config["num_particles"],
-                initial_spacing=merged_simulation_config["initial_spacing"],
-                particle_mass=merged_simulation_config["particle_mass"],
-                use_3d=merged_simulation_config["use_3d"],
-            ),
-        )
+        # Use structural pattern matching to handle different configuration types
+        match (
+            merged_physics_config,
+            merged_visualization_config,
+            merged_simulation_config,
+        ):
+            case (physics, visualization, simulation):
+                return cls(
+                    physics=PhysicsConfig(
+                        gravity=physics["gravity"],
+                        damping=physics["damping"],
+                        spring_constant=physics["spring_constant"],
+                        rest_length=physics["rest_length"],
+                        time_step=physics["time_step"],
+                        integration_method=physics["integration_method"],
+                    ),
+                    visualization=VisualizationConfig(
+                        trail_length=visualization["trail_length"],
+                        particle_size=visualization["particle_size"],
+                        axis_margin=visualization["axis_margin"],
+                        min_axis_margin=visualization["min_axis_margin"],
+                        update_interval=visualization["update_interval"],
+                    ),
+                    simulation=SimulationConfig(
+                        num_particles=simulation["num_particles"],
+                        initial_spacing=simulation["initial_spacing"],
+                        particle_mass=simulation["particle_mass"],
+                        use_3d=simulation["use_3d"],
+                    ),
+                )
 
 
 # Default configuration instance
