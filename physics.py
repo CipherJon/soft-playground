@@ -17,10 +17,19 @@ from config import PhysicsConfig, default_config
 class Particle:
     """Represents a particle with position, previous position, and mass."""
 
-    position: np.ndarray
-    previous_position: np.ndarray
-    mass: float = 1.0
-    is_fixed: bool = False
+    __slots__ = ("position", "previous_position", "mass", "is_fixed")
+
+    def __init__(
+        self,
+        position: np.ndarray,
+        previous_position: np.ndarray,
+        mass: float = 1.0,
+        is_fixed: bool = False,
+    ):
+        self.position = position
+        self.previous_position = previous_position
+        self.mass = mass
+        self.is_fixed = is_fixed
 
 
 class PhysicsEngine:

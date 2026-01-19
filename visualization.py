@@ -100,8 +100,7 @@ class Visualization:
 
     def render(self):
         """Render the current state of the simulation."""
-        particles = self.simulation.get_particles()
-        if not particles:
+        if not (particles := self.simulation.get_particles()):
             return
 
         # Extract positions using generator expressions

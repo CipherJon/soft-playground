@@ -6,6 +6,7 @@ making it easy to adjust physics properties, visualization settings, and simulat
 """
 
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any, Dict, Tuple
 
 
@@ -77,6 +78,7 @@ class SimulationConfigManager:
         }
 
     @classmethod
+    @lru_cache(maxsize=None)
     def from_dict(cls, config_dict: Dict[str, Any]) -> "SimulationConfigManager":
         """Create configuration manager from dictionary."""
         physics_config = config_dict.get("physics", {})
