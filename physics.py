@@ -13,23 +13,61 @@ import numpy as np
 from config import PhysicsConfig, default_config
 
 
-@dataclass
 class Particle:
-    """Represents a particle with position, previous position, and mass."""
+    """Lightweight particle representation that acts as a view into array storage."""
 
-    __slots__ = ("position", "previous_position", "mass", "is_fixed")
+    __slots__ = ("_engine", "_index")
 
-    def __init__(
-        self,
-        position: np.ndarray,
-        previous_position: np.ndarray,
-        mass: float = 1.0,
-        is_fixed: bool = False,
-    ):
-        self.position = position
-        self.previous_position = previous_position
-        self.mass = mass
-        self.is_fixed = is_fixed
+    def __init__(self, engine, index: int):
+        """
+        Initialize a particle as a view into engine's array storage.
+
+        Args:
+            engine: PhysicsEngine instance
+            index: Index of this particle in the engine's arrays
+        """
+        self._engine = engine
+        self._index = index
+
+    @property
+    def position(self) -> np.ndarray:
+        """Get current position."""
+        return self._engine._positions[self._index]
+
+    @position.setter
+    def position(self, value: np.ndarray):
+        """Set current position."""
+        self._engine._positions[self._index] = value
+
+    @property
+    def previous_position(self) -> np.ndarray:
+        """Get previous position."""
+        return self._engine._previous_positions[self._index]
+
+    @previous_position.setter
+    def previous_position(self, value: np.ndarray):
+        """Set previous position."""
+        self._engine._previous_positions[self._index] = value
+
+    @property
+    def mass(self) -> float:
+        """Get mass."""
+        return self._engine._masses[self._index]
+
+    @mass.setter
+    def mass(self, value: float):
+        """Set mass."""
+        self._engine._masses[self._index] = value
+
+    @property
+    def is_fixed(self) -> bool:
+        """Get fixed status."""
+        return self._engine._fixed_mask[self._index]
+
+    @is_fixed.setter
+    def is_fixed(self, value: bool):
+        """Set fixed status."""
+        self._engine._fixed_mask[self._index] = value
 
 
 class PhysicsEngine:
@@ -46,7 +84,7 @@ class PhysicsEngine:
         self.particles: List[Particle] = []
         self.constraints: List[Tuple[int, int]] = []
 
-        # Vectorized storage for performance
+        # Vectorized storage for performance (primary storage)
         self._positions = None  # Shape: (n_particles, 3)
         self._previous_positions = None  # Shape: (n_particles, 3)
         self._masses = None  # Shape: (n_particles,)
@@ -75,23 +113,19 @@ class PhysicsEngine:
         default_mass = 1.0
         n_particles = len(positions)
 
-        # Initialize particles list
-        self.particles = [
-            Particle(
-                position=pos.copy(),
-                previous_position=pos.copy(),
-                mass=masses[i] if masses and i < len(masses) else default_mass,
-            )
-            for i, pos in enumerate(positions)
-        ]
-
-        # Initialize vectorized arrays
-        self._positions = np.array([p.position for p in self.particles])
-        self._previous_positions = np.array(
-            [p.previous_position for p in self.particles]
+        # Initialize vectorized arrays (primary storage)
+        self._positions = np.array([pos.copy() for pos in positions])
+        self._previous_positions = np.array([pos.copy() for pos in positions])
+        self._masses = np.array(
+            [
+                masses[i] if masses and i < len(masses) else default_mass
+                for i in range(n_particles)
+            ]
         )
-        self._masses = np.array([p.mass for p in self.particles])
-        self._fixed_mask = np.array([p.is_fixed for p in self.particles], dtype=bool)
+        self._fixed_mask = np.zeros(n_particles, dtype=bool)
+
+        # Initialize particles as views into the arrays
+        self.particles = [Particle(self, i) for i in range(n_particles)]
 
     def set_constraints(self, constraints: List[Tuple[int, int]]):
         """
@@ -133,8 +167,7 @@ class PhysicsEngine:
         # Apply damping
         self._positions[non_fixed] *= damping
 
-        # Update particle objects
-        self._sync_particle_objects()
+        # No need to sync - particles are views into arrays
 
         # Apply constraints (springs)
         self._apply_spring_constraints_vectorized()
@@ -159,8 +192,7 @@ class PhysicsEngine:
         # Apply damping
         self._positions[non_fixed] *= damping
 
-        # Update particle objects
-        self._sync_particle_objects()
+        # No need to sync - particles are views into arrays
 
         # Apply constraints (springs)
         self._apply_spring_constraints_vectorized()
@@ -215,14 +247,11 @@ class PhysicsEngine:
             if not self._fixed_mask[j]:
                 self._positions[j] += acceleration_j[idx] * time_step * time_step
 
-        # Update particle objects
-        self._sync_particle_objects()
+        # No need to sync - particles are views into arrays
 
     def _sync_particle_objects(self):
-        """Synchronize particle objects with vectorized arrays."""
-        for i, particle in enumerate(self.particles):
-            particle.position = self._positions[i]
-            particle.previous_position = self._previous_positions[i]
+        """No longer needed - particles are views into arrays."""
+        pass
 
     def get_positions(self) -> List[np.ndarray]:
         """
@@ -242,8 +271,8 @@ class PhysicsEngine:
             is_fixed: Whether the particle should be fixed
         """
         if 0 <= index < len(self.particles):
-            self.particles[index].is_fixed = is_fixed
             self._fixed_mask[index] = is_fixed
+            # Particle object will reflect this change automatically
 
     def get_particle_mass(self, index: int) -> float:
         """
@@ -278,7 +307,6 @@ class PhysicsEngine:
             raise IndexError(f"Particle index {index} out of range")
         if mass <= 0:
             raise ValueError("Mass must be positive")
-        self.particles[index].mass = mass
         self._masses[index] = mass
 
     def set_particle_position(self, index: int, position: np.ndarray):
@@ -294,7 +322,5 @@ class PhysicsEngine:
         """
         if not 0 <= index < len(self.particles):
             raise IndexError(f"Particle index {index} out of range")
-        self.particles[index].position = position.copy()
-        self.particles[index].previous_position = position.copy()
         self._positions[index] = position.copy()
         self._previous_positions[index] = position.copy()
