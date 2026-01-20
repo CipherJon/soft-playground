@@ -10,6 +10,7 @@ import matplotlib
 matplotlib.use("TkAgg")  # Set the backend explicitly
 
 from collections import deque
+from contextlib import contextmanager, suppress
 from typing import List, Optional
 
 import matplotlib.pyplot as plt
@@ -19,8 +20,50 @@ from matplotlib.widgets import Button
 from config import VisualizationConfig, default_config
 
 
+class VisualizationContext:
+    """Context manager for managing visualization state."""
+
+    def __init__(self, visualization):
+        self.visualization = visualization
+        self.original_state = {}
+
+    def __enter__(self):
+        """Enter the context, saving current state."""
+        self.original_state = {
+            "paused": self.visualization.paused,
+            "selected_particle": self.visualization.selected_particle,
+            "dragging": self.visualization.dragging,
+        }
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Exit the context, restoring original state."""
+        self.visualization.paused = self.original_state["paused"]
+        self.visualization.selected_particle = self.original_state["selected_particle"]
+        self.visualization.dragging = self.original_state["dragging"]
+        return False
+
+
+# This context manager is now a method of the Visualization class
+
+
+@contextmanager
+def suppress_matplotlib_warnings():
+    """Context manager to suppress matplotlib warnings during operations."""
+    with suppress(Exception):
+        yield
+
+
 class Visualization:
     """Interactive visualization for soft body simulation."""
+
+    @contextmanager
+    def visualization_context(self):
+        """Context manager for visualization lifecycle management."""
+        try:
+            yield self
+        finally:
+            self.close()
 
     def __init__(self, simulation, config: Optional[VisualizationConfig] = None):
         """
@@ -214,49 +257,59 @@ class Visualization:
         self.pause_button.label.set_text("Resume" if self.paused else "Pause")
         self.fig.canvas.draw()
 
+    @contextmanager
+    def paused_simulation(self):
+        """Context manager to temporarily pause simulation."""
+        original_paused = self.paused
+        self.paused = True
+        try:
+            yield
+        finally:
+            self.paused = original_paused
+
     def reset_simulation(self, event):
         """Reset the simulation to initial state."""
-        # Reinitialize the softbody
-        self.simulation._initialize_softbody()
+        # Use context manager to ensure clean reset
+        with self.paused_simulation():
+            # Reinitialize the softbody
+            self.simulation._initialize_softbody()
 
-        # Clear trails
-        for trail in self.trails:
-            trail.clear()
+            # Clear trails
+            for trail in self.trails:
+                trail.clear()
 
-        # Force redraw without updating trails
-        self.paused = False
-        self.pause_button.label.set_text("Pause")
+            # Update plot elements without updating trails
+            particles = self.simulation.get_particles()
+            if particles:
+                x = [p[0] for p in particles]
+                y = [p[1] for p in particles]
 
-        # Update plot elements without updating trails
-        particles = self.simulation.get_particles()
-        if particles:
-            x = [p[0] for p in particles]
-            y = [p[1] for p in particles]
+                if self.particle_scatter is None:
+                    self._initialize_plot_elements(particles)
+                else:
+                    self._update_plot_elements(particles, x, y)
+                    self._adjust_axis_limits(x, y)
 
-            if self.particle_scatter is None:
-                self._initialize_plot_elements(particles)
-            else:
-                self._update_plot_elements(particles, x, y)
-                self._adjust_axis_limits(x, y)
-
-        self.fig.canvas.draw()
+            self.fig.canvas.draw()
 
     def on_press(self, event):
         """Handle mouse press events for particle selection."""
         if event.inaxes != self.ax:
             return
 
-        # Check if a particle was clicked
-        particles = self.simulation.get_particles()
-        x = [p[0] for p in particles]
-        y = [p[1] for p in particles]
+        # Use context manager for safe particle selection
+        with suppress(Exception):
+            # Check if a particle was clicked
+            particles = self.simulation.get_particles()
+            x = [p[0] for p in particles]
+            y = [p[1] for p in particles]
 
-        # Find clicked particle
-        for i, (xi, yi) in enumerate(zip(x, y)):
-            if np.sqrt((event.xdata - xi) ** 2 + (event.ydata - yi) ** 2) < 0.1:
-                self.selected_particle = i
-                self.dragging = True
-                break
+            # Find clicked particle
+            for i, (xi, yi) in enumerate(zip(x, y)):
+                if np.sqrt((event.xdata - xi) ** 2 + (event.ydata - yi) ** 2) < 0.1:
+                    self.selected_particle = i
+                    self.dragging = True
+                    break
 
     def on_motion(self, event):
         """Handle mouse motion events for particle dragging."""
@@ -267,13 +320,12 @@ class Visualization:
         ):
             return
 
-        # Update the position of the selected particle
-        try:
+        # Use context manager for safe particle dragging
+        with suppress_matplotlib_warnings():
+            # Update the position of the selected particle
             self.simulation.set_particle_position(
                 self.selected_particle, np.array([event.xdata, event.ydata, 0.0])
             )
-        except (IndexError, AttributeError):
-            pass
 
     def on_release(self, event):
         """Handle mouse release events."""
@@ -291,6 +343,7 @@ class Visualization:
 
     def close(self):
         """Clean up visualization resources."""
-        if hasattr(self, "animation_timer"):
-            self.animation_timer.stop()
-        plt.close(self.fig)
+        with suppress(Exception):
+            if hasattr(self, "animation_timer"):
+                self.animation_timer.stop()
+            plt.close(self.fig)
