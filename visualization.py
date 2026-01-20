@@ -11,6 +11,8 @@ matplotlib.use("TkAgg")  # Set the backend explicitly
 
 from collections import deque
 from contextlib import contextmanager, suppress
+from itertools import chain, islice, tee
+from operator import attrgetter, itemgetter, methodcaller
 from typing import List, Optional
 
 import matplotlib.pyplot as plt
@@ -146,11 +148,13 @@ class Visualization:
         if not (particles := self.simulation.get_particles()):
             return
 
-        # Extract positions using generator expressions
-        x = list(p[0] for p in particles)
-        y = list(p[1] for p in particles)
+        # Extract positions using functional patterns
+        get_x = itemgetter(0)
+        get_y = itemgetter(1)
+        x = list(map(get_x, particles))
+        y = list(map(get_y, particles))
 
-        # Update trails
+        # Update trails using functional iteration
         for i, (xi, yi) in enumerate(zip(x, y)):
             self.trails[i].append((xi, yi))
 
@@ -173,8 +177,9 @@ class Visualization:
 
     def _initialize_plot_elements(self, particles: List[np.ndarray]):
         """Initialize plot elements for the first render."""
-        x = [p[0] for p in particles]
-        y = [p[1] for p in particles]
+        # Use functional mapping for coordinate extraction
+        x = list(map(itemgetter(0), particles))
+        y = list(map(itemgetter(1), particles))
 
         # Plot trails
         for trail in self.trails:
@@ -197,55 +202,70 @@ class Visualization:
             linewidth=0.5,
         )
 
-        # Plot constraints (springs)
+        # Plot constraints (springs) using functional filtering
         constraints = self.simulation.get_constraints()
-        for i, j in constraints:
-            if i < len(particles) and j < len(particles):
-                (line,) = self.ax.plot(
-                    [x[i], x[j]],
-                    [y[i], y[j]],
-                    color="red",
-                    alpha=0.6,
-                    linewidth=1.5,
-                    label="Constraints" if not self.constraint_lines else "",
-                )
-                self.constraint_lines.append(line)
+        valid_constraints = [
+            (i, j) for i, j in constraints if i < len(particles) and j < len(particles)
+        ]
+
+        for constraint_idx, (i, j) in enumerate(valid_constraints):
+            (line,) = self.ax.plot(
+                [x[i], x[j]],
+                [y[i], y[j]],
+                color="red",
+                alpha=0.6,
+                linewidth=1.5,
+                label="Constraints" if constraint_idx == 0 else "",
+            )
+            self.constraint_lines.append(line)
 
     def _update_plot_elements(
         self, particles: List[np.ndarray], x: List[float], y: List[float]
     ):
-        """Update existing plot elements."""
+        """Update existing plot elements using functional patterns."""
         # Update particle positions
         if self.particle_scatter is not None:
             self.particle_scatter.set_offsets(list(zip(x, y)))
 
-        # Update trails
-        for i, trail_line in enumerate(self.trail_lines):
-            if len(self.trails[i]) > 1:
-                trail_x, trail_y = zip(*self.trails[i])
-                trail_line.set_data(trail_x, trail_y)
+        # Update trails using functional filtering and mapping
+        trails_with_data = filter(lambda trail: len(trail) > 1, self.trails)
+        for i, trail in enumerate(trails_with_data):
+            if i < len(self.trail_lines):
+                trail_x, trail_y = zip(*trail)
+                self.trail_lines[i].set_data(trail_x, trail_y)
 
-        # Update constraints
+        # Update constraints using functional approach
         constraints = self.simulation.get_constraints()
-        for idx, (i, j) in enumerate(constraints):
-            if i < len(particles) and j < len(particles):
-                if idx < len(self.constraint_lines):
-                    self.constraint_lines[idx].set_data([x[i], x[j]], [y[i], y[j]])
+        valid_constraints = [
+            (idx, i, j)
+            for idx, (i, j) in enumerate(constraints)
+            if i < len(particles)
+            and j < len(particles)
+            and idx < len(self.constraint_lines)
+        ]
+
+        for constraint_idx, i, j in valid_constraints:
+            self.constraint_lines[constraint_idx].set_data([x[i], x[j]], [y[i], y[j]])
 
     def _adjust_axis_limits(self, x: List[float], y: List[float]):
-        """Adjust axis limits to fit particles with margin."""
+        """Adjust axis limits to fit particles with margin using functional approach."""
         if not x or not y:
             return
 
+        # Use functional operations for min/max calculations
         x_min, x_max = min(x), max(x)
         y_min, y_max = min(y), max(y)
 
-        # Calculate margins
+        # Calculate margins using functional approach
         x_range = x_max - x_min
         y_range = y_max - y_min
 
-        x_margin = max(x_range * self.config.axis_margin, self.config.min_axis_margin)
-        y_margin = max(y_range * self.config.axis_margin, self.config.min_axis_margin)
+        margin_calculator = lambda range_val: max(
+            range_val * self.config.axis_margin, self.config.min_axis_margin
+        )
+
+        x_margin = margin_calculator(x_range)
+        y_margin = margin_calculator(y_range)
 
         # Apply margins
         self.ax.set_xlim(x_min - x_margin, x_max + x_margin)
@@ -293,38 +313,45 @@ class Visualization:
             self.fig.canvas.draw()
 
     def on_press(self, event):
-        """Handle mouse press events for particle selection."""
+        """Handle mouse press events for particle selection using functional patterns."""
         if event.inaxes != self.ax:
             return
 
         # Use context manager for safe particle selection
         with suppress(Exception):
-            # Check if a particle was clicked
+            # Check if a particle was clicked using functional approach
             particles = self.simulation.get_particles()
-            x = [p[0] for p in particles]
-            y = [p[1] for p in particles]
+            positions = list(map(itemgetter(0, 1), particles))
 
-            # Find clicked particle
-            for i, (xi, yi) in enumerate(zip(x, y)):
-                if np.sqrt((event.xdata - xi) ** 2 + (event.ydata - yi) ** 2) < 0.1:
+            # Calculate distances using functional mapping
+            event_pos = (event.xdata, event.ydata)
+            distance_squared = (
+                lambda pos: (pos[0] - event_pos[0]) ** 2 + (pos[1] - event_pos[1]) ** 2
+            )
+
+            # Find first particle within selection radius
+            for i, pos in enumerate(positions):
+                if distance_squared(pos) < 0.01:  # 0.1^2
                     self.selected_particle = i
                     self.dragging = True
                     break
 
     def on_motion(self, event):
-        """Handle mouse motion events for particle dragging."""
-        if (
-            not self.dragging
-            or self.selected_particle is None
-            or event.inaxes != self.ax
-        ):
+        """Handle mouse motion events for particle dragging using functional patterns."""
+        # Use functional approach for condition checking
+        should_drag = all(
+            [self.dragging, self.selected_particle is not None, event.inaxes == self.ax]
+        )
+
+        if not should_drag:
             return
 
         # Use context manager for safe particle dragging
         with suppress_matplotlib_warnings():
-            # Update the position of the selected particle
+            # Create position array using functional approach
+            position_creator = lambda x, y: np.array([x, y, 0.0])
             self.simulation.set_particle_position(
-                self.selected_particle, np.array([event.xdata, event.ydata, 0.0])
+                self.selected_particle, position_creator(event.xdata, event.ydata)
             )
 
     def on_release(self, event):
