@@ -6,7 +6,7 @@ and Verlet integration using vectorized NumPy operations for improved performanc
 """
 
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, TypeGuard
 
 import numpy as np
 
@@ -303,11 +303,19 @@ class PhysicsEngine:
             IndexError: If index is out of range
             ValueError: If mass is not positive
         """
-        if not 0 <= index < len(self.particles):
+        if not self._is_valid_index(index):
             raise IndexError(f"Particle index {index} out of range")
-        if mass <= 0:
+        if not self._is_valid_mass(mass):
             raise ValueError("Mass must be positive")
         self._masses[index] = mass
+
+    def _is_valid_index(self, index: int) -> TypeGuard[int]:
+        """Check if the index is valid for particle access."""
+        return 0 <= index < len(self.particles)
+
+    def _is_valid_mass(self, mass: float) -> TypeGuard[float]:
+        """Check if the mass is valid (positive)."""
+        return mass > 0
 
     def set_particle_position(self, index: int, position: np.ndarray):
         """
