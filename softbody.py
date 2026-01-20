@@ -96,11 +96,7 @@ class SoftBodySimulation:
         Raises:
             IndexError: If index is out of range
         """
-        if 0 <= index < len(self.physics_engine.particles):
-            self.physics_engine.particles[index].position = position.copy()
-            self.physics_engine.particles[index].previous_position = position.copy()
-        else:
-            raise IndexError(f"Particle index {index} out of range")
+        self.physics_engine.set_particle_position(index, position)
 
     def get_particle_mass(self, index: int) -> float:
         """
