@@ -135,6 +135,152 @@ class TestPhysicsEngine(unittest.TestCase):
         with self.assertRaises(IndexError):
             self.engine.set_particle_mass(1, 1.0)
 
+    def test_zero_particles(self):
+        """Test behavior with zero particles."""
+        # Initialize with zero particles
+        self.assertEqual(len(self.engine.particles), 0)
+        self.assertEqual(len(self.engine.constraints), 0)
+
+        # Test that operations on zero particles raise appropriate errors
+        with self.assertRaises(RuntimeError):
+            self.engine.update()  # Should raise error for uninitialized arrays
+
+    def test_single_particle(self):
+        """Test behavior with a single particle."""
+        positions = [np.array([0.0, 0.0, 0.0])]
+        self.engine.initialize_particles(positions)
+
+        self.assertEqual(len(self.engine.particles), 1)
+
+        # Single particle should move due to gravity
+        initial_position = self.engine.get_positions()[0].copy()
+        self.engine.update()
+        updated_position = self.engine.get_positions()[0]
+
+        self.assertFalse(np.array_equal(initial_position, updated_position))
+
+    def test_extreme_mass_values(self):
+        """Test behavior with extreme mass values."""
+        positions = [np.array([0.0, 0.0, 0.0]), np.array([1.0, 0.0, 0.0])]
+        masses = [1e-6, 1e6]  # Very small and very large masses
+        self.engine.initialize_particles(positions, masses)
+
+        # Test that extreme masses don't cause numerical issues
+        self.engine.update()
+        updated_positions = self.engine.get_positions()
+
+        # Positions should still be finite
+        for pos in updated_positions:
+            self.assertTrue(np.all(np.isfinite(pos)))
+
+    def test_extreme_gravity(self):
+        """Test behavior with extreme gravity values."""
+        # Test with very high gravity
+        self.config.gravity = (0.0, -1000.0, 0.0)
+        self.engine = PhysicsEngine(self.config)
+
+        positions = [np.array([0.0, 0.0, 0.0])]
+        self.engine.initialize_particles(positions)
+
+        initial_position = self.engine.get_positions()[0].copy()
+        self.engine.update()
+        updated_position = self.engine.get_positions()[0]
+
+        # Particle should move significantly
+        self.assertFalse(np.array_equal(initial_position, updated_position))
+
+        # Position should still be finite
+        self.assertTrue(np.all(np.isfinite(updated_position)))
+
+    def test_zero_time_step(self):
+        """Test behavior with zero time step."""
+        self.config.time_step = 0.0
+        self.engine = PhysicsEngine(self.config)
+
+        positions = [np.array([0.0, 0.0, 0.0])]
+        self.engine.initialize_particles(positions)
+
+        initial_position = self.engine.get_positions()[0].copy()
+        self.engine.update()
+        updated_position = self.engine.get_positions()[0]
+
+        # With zero time step, position should not change
+        np.testing.assert_array_almost_equal(initial_position, updated_position)
+
+    def test_invalid_constraint_indices(self):
+        """Test behavior with invalid constraint indices."""
+        positions = [np.array([0.0, 0.0, 0.0]), np.array([1.0, 0.0, 0.0])]
+        self.engine.initialize_particles(positions)
+
+        # Test constraint with invalid index - this should not raise an error
+        # as the physics engine doesn't validate constraint indices
+        self.engine.set_constraints([(0, 5)])  # Index 5 doesn't exist
+        # The constraint will simply be ignored during updates
+
+    def test_duplicate_constraints(self):
+        """Test behavior with duplicate constraints."""
+        positions = [
+            np.array([0.0, 0.0, 0.0]),
+            np.array([1.0, 0.0, 0.0]),
+            np.array([2.0, 0.0, 0.0]),
+        ]
+        self.engine.initialize_particles(positions)
+
+        # Add duplicate constraints
+        self.engine.set_constraints([(0, 1), (1, 2), (0, 1)])  # (0,1) is duplicated
+
+        # Should not crash and should handle duplicates gracefully
+        self.engine.update()
+
+    def test_numerical_stability_small_time_step(self):
+        """Test numerical stability with very small time step."""
+        self.config.time_step = 1e-6
+        self.engine = PhysicsEngine(self.config)
+
+        positions = [np.array([0.0, 0.0, 0.0]), np.array([1.0, 0.0, 0.0])]
+        self.engine.initialize_particles(positions)
+        self.engine.set_constraints([(0, 1)])
+
+        # Run multiple updates with small time step
+        for _ in range(100):
+            self.engine.update()
+
+        # Positions should remain finite
+        for pos in self.engine.get_positions():
+            self.assertTrue(np.all(np.isfinite(pos)))
+
+    def test_numerical_stability_large_time_step(self):
+        """Test numerical stability with very large time step."""
+        self.config.time_step = 1.0
+        self.engine = PhysicsEngine(self.config)
+
+        positions = [np.array([0.0, 0.0, 0.0]), np.array([1.0, 0.0, 0.0])]
+        self.engine.initialize_particles(positions)
+        self.engine.set_constraints([(0, 1)])
+
+        # Run update with large time step
+        self.engine.update()
+
+        # Positions should remain finite
+        for pos in self.engine.get_positions():
+            self.assertTrue(np.all(np.isfinite(pos)))
+
+    def test_extreme_spring_constant(self):
+        """Test behavior with extreme spring constant."""
+        self.config.spring_constant = 1000.0
+        self.engine = PhysicsEngine(self.config)
+
+        positions = [np.array([0.0, 0.0, 0.0]), np.array([2.0, 0.0, 0.0])]
+        self.engine.initialize_particles(positions)
+        self.engine.set_constraints([(0, 1)])
+
+        # Run update with extreme spring constant
+        self.engine.update()
+
+        # Positions should remain finite
+        for pos in self.engine.get_positions():
+            self.assertTrue(np.all(np.isfinite(pos)))
+
 
 if __name__ == "__main__":
     unittest.main()
