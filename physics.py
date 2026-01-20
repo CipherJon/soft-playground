@@ -5,10 +5,10 @@ This module implements a physics engine with support for gravity, damping, sprin
 and Verlet integration using vectorized NumPy operations for improved performance.
 """
 
-from dataclasses import dataclass
-from typing import List, Optional, Tuple, TypeGuard
+from typing import TypeGuard
 
 import numpy as np
+import numpy.typing as npt
 
 from config import PhysicsConfig, default_config
 
@@ -18,7 +18,7 @@ class Particle:
 
     __slots__ = ("_engine", "_index")
 
-    def __init__(self, engine, index: int):
+    def __init__(self, engine: "PhysicsEngine", index: int):
         """
         Initialize a particle as a view into engine's array storage.
 
@@ -30,50 +30,82 @@ class Particle:
         self._index = index
 
     @property
-    def position(self) -> np.ndarray:
+    def position(self) -> npt.NDArray[np.float64]:
         """Get current position."""
+        if self._engine._positions is None:
+            raise RuntimeError(
+                "Arrays not initialized. Call initialize_particles() first."
+            )
         return self._engine._positions[self._index]
 
     @position.setter
-    def position(self, value: np.ndarray):
+    def position(self, value: npt.NDArray[np.float64]):
         """Set current position."""
+        if self._engine._positions is None:
+            raise RuntimeError(
+                "Arrays not initialized. Call initialize_particles() first."
+            )
         self._engine._positions[self._index] = value
 
     @property
-    def previous_position(self) -> np.ndarray:
+    def previous_position(self) -> npt.NDArray[np.float64]:
         """Get previous position."""
+        if self._engine._previous_positions is None:
+            raise RuntimeError(
+                "Arrays not initialized. Call initialize_particles() first."
+            )
         return self._engine._previous_positions[self._index]
 
     @previous_position.setter
-    def previous_position(self, value: np.ndarray):
+    def previous_position(self, value: npt.NDArray[np.float64]):
         """Set previous position."""
+        if self._engine._previous_positions is None:
+            raise RuntimeError(
+                "Arrays not initialized. Call initialize_particles() first."
+            )
         self._engine._previous_positions[self._index] = value
 
     @property
     def mass(self) -> float:
         """Get mass."""
+        if self._engine._masses is None:
+            raise RuntimeError(
+                "Arrays not initialized. Call initialize_particles() first."
+            )
         return self._engine._masses[self._index]
 
     @mass.setter
     def mass(self, value: float):
         """Set mass."""
+        if self._engine._masses is None:
+            raise RuntimeError(
+                "Arrays not initialized. Call initialize_particles() first."
+            )
         self._engine._masses[self._index] = value
 
     @property
     def is_fixed(self) -> bool:
         """Get fixed status."""
+        if self._engine._fixed_mask is None:
+            raise RuntimeError(
+                "Arrays not initialized. Call initialize_particles() first."
+            )
         return self._engine._fixed_mask[self._index]
 
     @is_fixed.setter
     def is_fixed(self, value: bool):
         """Set fixed status."""
+        if self._engine._fixed_mask is None:
+            raise RuntimeError(
+                "Arrays not initialized. Call initialize_particles() first."
+            )
         self._engine._fixed_mask[self._index] = value
 
 
 class PhysicsEngine:
     """Physics engine for soft body simulation using vectorized operations."""
 
-    def __init__(self, config: Optional[PhysicsConfig] = None):
+    def __init__(self, config: PhysicsConfig | None = None):
         """
         Initialize the physics engine.
 
@@ -81,14 +113,20 @@ class PhysicsEngine:
             config: Physics configuration. If None, uses default configuration.
         """
         self.config = config if config is not None else default_config.physics
-        self.particles: List[Particle] = []
-        self.constraints: List[Tuple[int, int]] = []
+        self.particles: list[Particle] = []
+        self.constraints: list[tuple[int, int]] = []
 
         # Vectorized storage for performance (primary storage)
-        self._positions = None  # Shape: (n_particles, 3)
-        self._previous_positions = None  # Shape: (n_particles, 3)
-        self._masses = None  # Shape: (n_particles,)
-        self._fixed_mask = None  # Shape: (n_particles,), boolean
+        self._positions: npt.NDArray[np.float64] | None = (
+            None  # Shape: (n_particles, 3)
+        )
+        self._previous_positions: npt.NDArray[np.float64] | None = (
+            None  # Shape: (n_particles, 3)
+        )
+        self._masses: npt.NDArray[np.float64] | None = None  # Shape: (n_particles,)
+        self._fixed_mask: npt.NDArray[np.bool_] | None = (
+            None  # Shape: (n_particles,), boolean
+        )
 
         # Initialize integration method
         self._initialize_integration()
@@ -101,7 +139,9 @@ class PhysicsEngine:
             self._update_method = self._update_euler_vectorized
 
     def initialize_particles(
-        self, positions: List[np.ndarray], masses: Optional[List[float]] = None
+        self,
+        positions: list[npt.NDArray[np.float64]],
+        masses: list[float] | None = None,
     ):
         """
         Initialize particles with given positions and masses.
@@ -114,20 +154,23 @@ class PhysicsEngine:
         n_particles = len(positions)
 
         # Initialize vectorized arrays (primary storage)
-        self._positions = np.array([pos.copy() for pos in positions])
-        self._previous_positions = np.array([pos.copy() for pos in positions])
+        self._positions = np.array([pos.copy() for pos in positions], dtype=np.float64)
+        self._previous_positions = np.array(
+            [pos.copy() for pos in positions], dtype=np.float64
+        )
         self._masses = np.array(
             [
                 masses[i] if masses and i < len(masses) else default_mass
                 for i in range(n_particles)
-            ]
+            ],
+            dtype=np.float64,
         )
         self._fixed_mask = np.zeros(n_particles, dtype=bool)
 
         # Initialize particles as views into the arrays
         self.particles = [Particle(self, i) for i in range(n_particles)]
 
-    def set_constraints(self, constraints: List[Tuple[int, int]]):
+    def set_constraints(self, constraints: list[tuple[int, int]]):
         """
         Set constraints between particles.
 
@@ -142,6 +185,15 @@ class PhysicsEngine:
 
     def _update_verlet_vectorized(self):
         """Update physics using Verlet integration with vectorized operations."""
+        if (
+            self._positions is None
+            or self._previous_positions is None
+            or self._fixed_mask is None
+        ):
+            raise RuntimeError(
+                "Arrays not initialized. Call initialize_particles() first."
+            )
+
         time_step = self.config.time_step
         gravity = np.array(self.config.gravity)
         damping = self.config.damping
@@ -174,6 +226,15 @@ class PhysicsEngine:
 
     def _update_euler_vectorized(self):
         """Update physics using simple Euler integration with vectorized operations."""
+        if (
+            self._positions is None
+            or self._previous_positions is None
+            or self._fixed_mask is None
+        ):
+            raise RuntimeError(
+                "Arrays not initialized. Call initialize_particles() first."
+            )
+
         time_step = self.config.time_step
         gravity = np.array(self.config.gravity)
         damping = self.config.damping
@@ -201,6 +262,11 @@ class PhysicsEngine:
         """Apply spring constraints between connected particles using vectorized operations."""
         if not self.constraints:
             return
+
+        if self._positions is None or self._masses is None or self._fixed_mask is None:
+            raise RuntimeError(
+                "Arrays not initialized. Call initialize_particles() first."
+            )
 
         spring_constant = self.config.spring_constant
         rest_length = self.config.rest_length
@@ -253,13 +319,17 @@ class PhysicsEngine:
         """No longer needed - particles are views into arrays."""
         pass
 
-    def get_positions(self) -> List[np.ndarray]:
+    def get_positions(self) -> list[npt.NDArray[np.float64]]:
         """
         Get current positions of all particles.
 
         Returns:
             List of particle positions
         """
+        if self._positions is None:
+            raise RuntimeError(
+                "Arrays not initialized. Call initialize_particles() first."
+            )
         return [self._positions[i].copy() for i in range(len(self.particles))]
 
     def set_particle_fixed(self, index: int, is_fixed: bool):
@@ -270,6 +340,10 @@ class PhysicsEngine:
             index: Index of the particle
             is_fixed: Whether the particle should be fixed
         """
+        if self._fixed_mask is None:
+            raise RuntimeError(
+                "Arrays not initialized. Call initialize_particles() first."
+            )
         if 0 <= index < len(self.particles):
             self._fixed_mask[index] = is_fixed
             # Particle object will reflect this change automatically
@@ -287,6 +361,10 @@ class PhysicsEngine:
         Raises:
             IndexError: If index is out of range
         """
+        if self._masses is None:
+            raise RuntimeError(
+                "Arrays not initialized. Call initialize_particles() first."
+            )
         if not 0 <= index < len(self.particles):
             raise IndexError(f"Particle index {index} out of range")
         return self._masses[index]
@@ -317,7 +395,7 @@ class PhysicsEngine:
         """Check if the mass is valid (positive)."""
         return mass > 0
 
-    def set_particle_position(self, index: int, position: np.ndarray):
+    def set_particle_position(self, index: int, position: npt.NDArray[np.float64]):
         """
         Set the position of a particle.
 
@@ -328,6 +406,10 @@ class PhysicsEngine:
         Raises:
             IndexError: If index is out of range
         """
+        if self._positions is None or self._previous_positions is None:
+            raise RuntimeError(
+                "Arrays not initialized. Call initialize_particles() first."
+            )
         if not 0 <= index < len(self.particles):
             raise IndexError(f"Particle index {index} out of range")
         self._positions[index] = position.copy()
